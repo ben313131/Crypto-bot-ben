@@ -1,0 +1,10 @@
+
+services:
+  - type: web
+    name: spidey-bot
+    env: python
+    buildCommand: ""
+    startCommand: "python main.py"
+    plan: free
+    envVars: []
+    autoDeploy: false
