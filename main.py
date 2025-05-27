@@ -1,4 +1,3 @@
-
 import time
 import requests
 import yfinance as yf
@@ -36,9 +35,7 @@ def send_discord_alert(name, symbol, rsi, price):
         return
 
     message = {
-        "content": f"{condition} - {name} ({symbol})
-RSI: {rsi:.2f}
-Prix actuel: ${price:.2f}"
+        "content": f"{condition} - {name} ({symbol})\nRSI: {rsi:.2f}\nPrix actuel: ${price:.2f}"
     }
     requests.post(WEBHOOK_URL, json=message)
 
@@ -56,9 +53,8 @@ def run_bot():
     while True:
         print("[Spidey Bot] Analyse en cours...")
         check_market()
-        time.sleep(300)  # 5 minutes
+        time.sleep(300)  # toutes les 5 minutes
 
-# Flask pour Render
 app = Flask(__name__)
 
 @app.route('/')
@@ -68,6 +64,5 @@ def home():
 def run_flask():
     app.run(host='0.0.0.0', port=10000)
 
-# Threads
 Thread(target=run_flask).start()
 Thread(target=run_bot).start()
