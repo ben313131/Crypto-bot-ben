@@ -41,7 +41,7 @@ def send_discord_alert(name, symbol, rsi, price):
 
 def check_market():
     for symbol, name in cryptos.items():
-        data = yf.download(symbol, period="15m", interval="1m")
+        data = yf.download(symbol, period="1d", interval="1m")
         if len(data) < 15:
             continue
         close_prices = data["Close"]
