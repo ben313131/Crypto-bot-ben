@@ -58,8 +58,7 @@ def send_discord_alert(name, symbol, rsi, macd_signal, price, volume_alert):
 
     if messages:
         message = {
-"content": f"**{name} ({symbol})**\\nPrix actuel : ${price:.2f}\\nRSI : {rsi:.2f}\\n" + "\\n".join(messages)
-" +         
+"content": f"**{name} ({symbol})**\nPrix actuel : ${price:.2f}\nRSI : {rsi:.2f}\n" + "\n".join(messages)
                        f"Prix actuel : ${price:.2f}
 " +
                        f"RSI : {rsi:.2f}
