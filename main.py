@@ -1,114 +1,84 @@
 
-import time
 import requests
-import yfinance as yf
+import time
 import pandas as pd
+import ta
+from datetime import datetime
 from flask import Flask
-from threading import Thread
-
-WEBHOOK_URL = "https://discord.com/api/webhooks/1375951141145411684/ERvineFGI3Nlp3bj7CdSaer_AymUNo8_7O4Hx6G27U9tflhaV_nPRcmDRj60cDSJu__c"
-
-cryptos = {
-    "BTC-USD": "Bitcoin",
-    "ETH-USD": "Ethereum",
-    "ADA-USD": "Cardano",
-    "SOL-USD": "Solana",
-    "XRP-USD": "XRP",
-    "TRX-USD": "TRON",
-    "DOGE-USD": "Dogecoin"
-}
-
-def calculate_rsi(data, period=14):
-    delta = data.diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
-
-def calculate_macd(data):
-    ema12 = data.ewm(span=12, adjust=False).mean()
-    ema26 = data.ewm(span=26, adjust=False).mean()
-    macd = ema12 - ema26
-    signal = macd.ewm(span=9, adjust=False).mean()
-    return macd, signal
-
-def calculate_bollinger_bands(data, window=20):
-    sma = data.rolling(window=window).mean()
-    std = data.rolling(window=window).std()
-    upper_band = sma + (2 * std)
-    lower_band = sma - (2 * std)
-    return upper_band, lower_band
-
-def send_discord_alert(name, symbol, rsi, macd_signal, price, volume_alert):
-    messages = []
-
-    if rsi < 30:
-        messages.append("ð **RSI en zone SURVENDUE**")
-    elif rsi > 70:
-        messages.append("ð¥ **RSI en zone SURACHETÃE**")
-
-    if macd_signal:
-        messages.append("ð **Croisement MACD haussier dÃ©tectÃ©**")
-
-    if volume_alert:
-        messages.append("â ï¸ **Volume anormalement Ã©levÃ© (pump/dump ?) dÃ©tectÃ©**")
-
-    if messages:
-        message = {
-"content": f"**{name} ({symbol})**\nPrix actuel : ${price:.2f}\nRSI : {rsi:.2f}\n" + "\n".join(messages)
-                       f"Prix actuel : ${price:.2f}
-" +
-                       f"RSI : {rsi:.2f}
-" +
-                       "
-".join(messages)
-        }
-        requests.post(WEBHOOK_URL, json=message)
-
-def check_market():
-    for symbol, name in cryptos.items():
-        data = yf.download(symbol, period="60d", interval="1d")
-        if len(data) < 30:
-            continue
-
-        close = data["Close"]
-        volume = data["Volume"]
-
-        rsi = calculate_rsi(close).iloc[-1]
-        macd, signal = calculate_macd(close)
-        boll_upper, boll_lower = calculate_bollinger_bands(close)
-
-        last_macd = macd.iloc[-1]
-        prev_macd = macd.iloc[-2]
-        last_signal = signal.iloc[-1]
-        prev_signal = signal.iloc[-2]
-
-        macd_bullish_cross = prev_macd < prev_signal and last_macd > last_signal
-
-        avg_volume = volume.rolling(window=20).mean()
-        volume_alert = volume.iloc[-1] > avg_volume.iloc[-1] * 2
-
-        price = close.iloc[-1]
-
-        send_discord_alert(name, symbol, rsi, macd_bullish_cross, price, volume_alert)
-
-def run_bot():
-    while True:
-        print("[Spidey Bot] Analyse en cours...")
-        check_market()
-        time.sleep(300)
 
 app = Flask(__name__)
 
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/TON_WEBHOOK_ICI"
+
+symbols = ["BTC/USDT", "ETH/USDT", "ADA/USDT", "SOL/USDT", "XRP/USDT", "TRX/USDT", "DOGE/USDT"]
+interval = "1d"
+
+def get_klines(symbol, interval, limit=100):
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol.replace('/', '')}&interval={interval}&limit={limit}"
+    response = requests.get(url)
+    data = response.json()
+    df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close", "volume",
+                                     "close_time", "quote_asset_volume", "number_of_trades",
+                                     "taker_buy_base", "taker_buy_quote", "ignore"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+    df.set_index("timestamp", inplace=True)
+    df["close"] = pd.to_numeric(df["close"])
+    df["volume"] = pd.to_numeric(df["volume"])
+    return df
+
+def analyze(symbol):
+    df = get_klines(symbol, interval)
+    df["rsi"] = ta.momentum.RSIIndicator(close=df["close"]).rsi()
+    df["macd_diff"] = ta.trend.MACD(close=df["close"]).macd_diff()
+    bollinger = ta.volatility.BollingerBands(close=df["close"])
+    df["bb_high"] = bollinger.bollinger_hband()
+    df["bb_low"] = bollinger.bollinger_lband()
+    df["bb_middle"] = bollinger.bollinger_mavg()
+
+    latest = df.iloc[-1]
+    rsi = latest["rsi"]
+    macd_diff = latest["macd_diff"]
+    close_price = latest["close"]
+    volume = latest["volume"]
+    name = symbol.split("/")[0]
+
+    alerts = []
+
+    if rsi < 30:
+        alerts.append("ðµ **RSI bas** â Possible survente")
+    elif rsi > 70:
+        alerts.append("ð´ **RSI Ã©levÃ©** â Possible surachat")
+
+    if macd_diff > 0:
+        alerts.append("ð¢ **MACD haussier**")
+    elif macd_diff < 0:
+        alerts.append("ð» **MACD baissier**")
+
+    if close_price < latest["bb_low"]:
+        alerts.append("ð **Prix sous bande de Bollinger**")
+    elif close_price > latest["bb_high"]:
+        alerts.append("ð **Prix au-dessus de la bande de Bollinger**")
+
+    if len(alerts) >= 2:
+        send_alert(name, symbol, close_price, rsi, alerts)
+
+def send_alert(name, symbol, price, rsi, messages):
+    json_data = {
+        "username": "Spidey Bot ð¤",
+        "avatar_url": "https://i.imgur.com/1X9eU4g.png",
+        "content": f"**{name} ({symbol})**\nPrix actuel : ${price:.2f}\nRSI : {rsi:.2f}\n" + "\n".join(messages)
+    }
+    requests.post(DISCORD_WEBHOOK_URL, json=json_data)
+
 @app.route('/')
 def home():
-    return "Spidey Bot est en ligne !"
+    return "Spidey Bot is running!"
 
-def run_flask():
-    app.run(host='0.0.0.0', port=10000)
-
-Thread(target=run_flask).start()
-Thread(target=run_bot).start()
+if __name__ == "__main__":
+    while True:
+        for symbol in symbols:
+            try:
+                analyze(symbol)
+            except Exception as e:
+                print(f"Erreur pour {symbol} : {e}")
+        time.sleep(86400)  # 1 jour = 86400 secondes
