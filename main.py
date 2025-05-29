@@ -82,3 +82,18 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"Erreur pour {symbol} : {e}")
         time.sleep(86400)  # 1 jour = 86400 secondes
+from flask import Flask
+import threading
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Spidey Bot is running!"
+
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
+
+# Lancer Flask dans un thread séparé
+flask_thread = threading.Thread(target=run_flask)
+flask_thread.start()
