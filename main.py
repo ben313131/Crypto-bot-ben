@@ -1,71 +1,104 @@
-
 import requests
 import time
 import yfinance as yf
+import pandas as pd
+import numpy as np
+from ta.momentum import RSIIndicator
+from ta.trend import MACD
+from ta.volatility import BollingerBands
 from flask import Flask
 import threading
 
-DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/..."  # Remplace par ton URL
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1375951141145411684/ERvineFGI3Nlp3bj7CdSaer_AymUNo8_7O4Hx6G27U9tflhaV_nPRcmDRj60cDSJu__c"
 
-symbols = ["BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD", "XRP-USD", "DOGE-USD", "TRX-USD"]
+symbols = ["BTC-USD", "ETH-USD", "ADA-USD", "SOL-USD", "XRP-USD", "TRX-USD", "DOGE-USD"]
 
-def rsi(prices, period=14):
-    deltas = [prices[i+1] - prices[i] for i in range(len(prices)-1)]
-    gains = [delta if delta > 0 else 0 for delta in deltas]
-    losses = [-delta if delta < 0 else 0 for delta in deltas]
-    avg_gain = sum(gains[:period]) / period
-    avg_loss = sum(losses[:period]) / period
-
-    for i in range(period, len(deltas)):
-        gain = gains[i]
-        loss = losses[i]
-        avg_gain = (avg_gain * (period - 1) + gain) / period
-        avg_loss = (avg_loss * (period - 1) + loss) / period
-
-    rs = avg_gain / avg_loss if avg_loss != 0 else 0
-    return 100 - (100 / (1 + rs))
-
-def send_alert(name, symbol, price, rsi_value):
+def send_alert(name, symbol, price, rsi, msg):
     json_data = {
         "username": "Spidey Bot 🕷️",
-        "avatar_url": "https://i.imgur.com/Uw6QZ5A.png",
-        "content": f"**{name} ({symbol})**\nPrix: **{price:.2f} $**\nRSI: **{rsi_value:.2f}**"
+        "avatar_url": "https://i.imgur.com/JJY2xXG.png",
+        "content": f"**{name} ({symbol})**\nPrix: `{price}`\nRSI: `{rsi}`\n📊 **Signal détecté :** {msg}"
     }
     requests.post(DISCORD_WEBHOOK_URL, json=json_data)
 
 def analyze(symbol):
-    data = yf.download(symbol, period="1mo", interval="1d")
-    close_prices = data["Close"].tolist()
-    if len(close_prices) < 15:
+    data = yf.download(symbol, period="90d", interval="1d")
+    if data.empty or len(data) < 50:
         return
 
-    current_price = close_prices[-1]
-    rsi_value = rsi(close_prices)
-    name = symbol.split("-")[0]
+    close = data["Close"]
+    volume = data["Volume"]
 
-    if rsi_value < 30 or rsi_value > 70:
-        send_alert(name, symbol, current_price, rsi_value)
+    # RSI
+    rsi = RSIIndicator(close).rsi().iloc[-1]
 
-# Serveur Flask
+    # Moyennes Mobiles
+    mm20 = close.rolling(window=20).mean().iloc[-1]
+    mm50 = close.rolling(window=50).mean().iloc[-1]
+
+    # Bollinger
+    bb = BollingerBands(close)
+    lower_bb = bb.bollinger_lband().iloc[-1]
+    upper_bb = bb.bollinger_hband().iloc[-1]
+
+    # MACD
+    macd = MACD(close)
+    macd_diff = macd.macd_diff().iloc[-1]
+
+    # Analyse volume pour pump/dump
+    vol_mean = volume[-20:].mean()
+    vol_current = volume.iloc[-1]
+    vol_ratio = vol_current / vol_mean
+
+    # Conditions d’alerte
+    price = round(close.iloc[-1], 4)
+    name = symbol.replace("-USD", "")
+    message = []
+
+    if rsi < 30:
+        message.append("💎 RSI bas (sous 30) - potentiel achat")
+    elif rsi > 70:
+        message.append("🚨 RSI haut (au-dessus de 70) - possible surachat")
+
+    if price < lower_bb:
+        message.append("📉 Prix sous la bande de Bollinger - survendu ?")
+    elif price > upper_bb:
+        message.append("📈 Prix au-dessus de la bande - suracheté ?")
+
+    if price > mm20 and mm20 > mm50:
+        message.append("📊 Tendance haussière confirmée (MM20 > MM50)")
+    elif price < mm20 and mm20 < mm50:
+        message.append("🔻 Tendance baissière confirmée (MM20 < MM50)")
+
+    if macd_diff > 0:
+        message.append("🟢 MACD haussier")
+    elif macd_diff < 0:
+        message.append("🔴 MACD baissier")
+
+    if vol_ratio > 3:
+        message.append("🚀 Volume X3 - activité inhabituelle")
+
+    if message:
+        send_alert(name, symbol, price, round(rsi, 2), "\n".join(message))
+
+# Flask pour Render
 app = Flask(__name__)
 
-@app.route('/')
+@app.route("/")
 def home():
     return "Spidey Bot is running!"
 
 def run_flask():
-    app.run(host='0.0.0.0', port=10000)
+    app.run(host="0.0.0.0", port=10000)
 
-def start_bot():
+if __name__ == "__main__":
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+
     while True:
         for symbol in symbols:
             try:
                 analyze(symbol)
             except Exception as e:
                 print(f"Erreur pour {symbol} : {e}")
-        time.sleep(86400)  # 1 jour
-
-if __name__ == "__main__":
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-    start_bot()
+        time.sleep(300)  # 1 fois par jour
