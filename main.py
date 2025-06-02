@@ -102,3 +102,17 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"Erreur pour {symbol} : {e}")
         time.sleep(300)  # 1 fois par jour
+if __name__ == "__main__":
+    # ... ici, ton code habituel pour lancer le bot, comme app.run() si tu utilises Flask
+
+    # TEST MANUEL D'ENVOI
+    import requests
+
+    webhook_url = "https://discord.com/api/webhooks/..."  # Mets ton vrai URL ici
+    data = {
+        "content": "✅ Ceci est un test manuel du Spidey Bot (fin du script)"
+    }
+
+    response = requests.post(webhook_url, json=data)
+    print(f"Status: {response.status_code}")
+    print(f"Réponse de Discord: {response.text}")
