@@ -95,14 +95,7 @@ if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
 
-    while True:
-        for symbol in symbols:
-            try:
-                analyze(symbol)
-            except Exception as e:
-                print(f"Erreur pour {symbol} : {e}")
-        time.sleep(300)  # 1 fois par jour
-if __name__ == "__main__":
+    if __name__ == "__main__":
     # ... ici, ton code habituel pour lancer le bot, comme app.run() si tu utilises Flask
 
     # TEST MANUEL D'ENVOI
@@ -116,3 +109,10 @@ if __name__ == "__main__":
     response = requests.post(webhook_url, json=data)
     print(f"Status: {response.status_code}")
     print(f"Réponse de Discord: {response.text}")
+    while True:
+        for symbol in symbols:
+            try:
+                analyze(symbol)
+            except Exception as e:
+                print(f"Erreur pour la {symbol} : {e}")
+        time.sleep(300)  # 1 fois par jour
